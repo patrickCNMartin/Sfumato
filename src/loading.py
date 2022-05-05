@@ -36,25 +36,25 @@ def loadCounts(counts):
     cloc.columns = header
     return cloc
 
-def convertToNumpy(counts,coordinates):
-    #Extracting dimensions
-    barcodes = counts.shape[1]
-    genes = counts.shape[0]
-    # Estimate number and rows and extraction locations
-    nrow = coordinates["ycoord"].max() - coordinates["ycoord"].min()
-    nrow = nrow.astype(np.int64)
-    ncol = coordinates["xcoord"].max() - coordinates["xcoord"].min()
-    ncol = ncol.astype(np.int64)
-    coordinates[["xcoord","ycoord"]] = coordinates[["xcoord","ycoord"]].apply(lambda coord : coord - coord.min())
-    coordinates[["xcoord","ycoord"]] = coordinates[["xcoord","ycoord"]].astype(np.int64)
-    #Build place holder template
-    arr = np.zeros((nrow+1,ncol+1,genes))
-    for l in range(coordinates.shape[0]):
-        bar = coordinates.loc[l,"barcodes"]
-        nonZeroCounts = counts[bar] != 0
-        arr[coordinates.loc[l,"ycoord"],coordinates.loc[l,"xcoord"],nonZeroCounts] = counts.loc[counts[bar] != 0,bar]
-    ####
-    return arr
+#def convertToNumpy(counts,coordinates):
+#    #Extracting dimensions
+#    barcodes = counts.shape[1]
+#    genes = counts.shape[0]
+#    # Estimate number and rows and extraction locations
+#    nrow = coordinates["ycoord"].max() - coordinates["ycoord"].min()
+#    nrow = nrow.astype(np.int64)
+#    ncol = coordinates["xcoord"].max() - coordinates["xcoord"].min()
+#    ncol = ncol.astype(np.int64)
+#    coordinates[["xcoord","ycoord"]] = coordinates[["xcoord","ycoord"]].apply(lambda coord : coord - coord.min())
+#    coordinates[["xcoord","ycoord"]] = coordinates[["xcoord","ycoord"]].astype(np.int64)
+#    #Build place holder template
+#    arr = np.zeros((nrow+1,ncol+1,genes))
+#    for l in range(coordinates.shape[0]):
+#        bar = coordinates.loc[l,"barcodes"]
+#        nonZeroCounts = counts[bar] != 0
+#        arr[coordinates.loc[l,"ycoord"],coordinates.loc[l,"xcoord"],nonZeroCounts] = counts.loc[counts[bar] != 0,bar]
+#    ####
+#    return arr
 
 
 #-----------------------/Converting/-------------------------------------------#

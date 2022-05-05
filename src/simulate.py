@@ -2,17 +2,19 @@
 ##########################    Gradient Analysis     ############################
 ################################################################################
 #--------------------------------/ imports /-----------------------------------#
-
+import numpy as np
+import random
 
 #------------------------------/ Simulations /---------------------------------#
-# Here I want to have some function to simulate various scenarios
-# I don't want to go directly on ST data
 
-
-def simulateTerritories(n = 3,cellType = 3):
-    pass
-
-
-
-def simulateFunctionalUnits(n=10,depth=3,type = "circular",fill=True):
-    pass 
+class simTissue:
+    def __init__(self, n, structType):
+        self.grid = np.zeros((n,n))
+        self.gridSize = n
+        self.structType = structType
+    def seedGrid(self,n_seeds, n_cells):
+        canvas = self.grid
+        x = random.sample(range(self.grid), k = n_seeds).astype(np.int64)
+        y = random.sample(range(self.grid), k = n_seeds).astype(np.int64)
+        canvas[x,y] = random.choices(range(n_cells),k=n_seeds).astype(np.int64)
+        return canvas
