@@ -1,9 +1,7 @@
 import csv
-from itertools import count
 
 import numpy as np
 import pandas as pd
-import multiprocessing as mp
 
 from typing import Generator
 
@@ -36,6 +34,22 @@ def readr_generator(filename: str, delimiter: str=",") -> Generator:
             yield line, i
 
 
+def obtain_gene_names(readr: Generator, skip_fst_col: bool=True) -> tuple:
+    """Obtains the gene names.
+
+    Args:
+        readr (Generator): generator of the rows of the data.
+
+    Returns:
+        headers (list[str]): names of the genes.
+        readr (Generator): generator of the rows of the data without the first
+            row.
+    """
+
+    headers = next(readr)[skip_fst_col+3]
+    return headers, readr
+
+
 def sep_tag_counts(row: list, index: int, skip_fst_col: bool=True) -> tuple:
     """Given a row of data, it separates the tags from the counts.
 
@@ -56,9 +70,9 @@ def sep_tag_counts(row: list, index: int, skip_fst_col: bool=True) -> tuple:
     tags = {'barcode': row[skip_fst_col], 
             'x_coor': float(row[skip_fst_col + 1]), 
             'y_coor': float(row[skip_fst_col + 2]),
-            'index': index}
+            'index': index-1}
     
-    return (tags, np.array(row[skip_fst_col+3:] + [index], dtype=int))
+    return (tags, np.array(row[skip_fst_col+3:], dtype=int))
 
 
 # ---------------------------- #
@@ -121,6 +135,74 @@ def calc_row_metrics(tags: dict, gene_counts: np.ndarray) -> dict:
     row_gene_counts(tags, gene_counts)
     row_gene_var(tags, gene_counts)
     return tags
+
+
+# ---------------------------- #
+#        gene metrics          #
+# ---------------------------- #
+
+def calc_barcode_per_gene(gene_counts: np.ndarray) -> np.ndarray:
+    """Calculates the number of barcodes that contain each gene.
+
+    Args:
+        gene_counts (np.ndarray): count matrix of barcodes x genes.
+
+    Returns:
+        np.ndarray: 1-D array of the number of barcodes that measured that gene.
+    """
+
+    return np.sum(gene_counts > 0, axis=1)
+
+
+def calc_total_measures_per_gene(gene_counts: np.ndarray) -> np.ndarray:
+    """Calculates the sum of the number of times each gene was measured accross
+    all barcodes.
+
+    Args:
+        gene_counts (np.ndarray): count matrix of barcodes x genes.
+
+    Returns:
+        np.ndarray: 1-D array of the number of times each gene was measured.
+    """
+
+    return np.sum(gene_counts, axis=1)
+
+
+def calc_var_per_gene(gene_counts: np.ndarray) -> np.ndarray:
+    """Calculates the variance of the number of measures of each gene.
+
+    Args:
+        gene_counts (np.ndarray): count matrix of barcodes x genes.
+
+    Returns:
+        np.ndarray: 1-D array of the variance of the measure count of each gene.
+    """
+
+    return np.var(gene_counts, axis=1)
+
+
+def calc_gene_metrics(gene_names: list, 
+                        gene_counts: np.ndarray) -> pd.DataFrame:
+    """Constructs a dataframe with the metrics regarding each gene. Namely, it
+    includes the number of barcodes the measure each gene, the total number of
+    measures of each gene and the variance in the measures of each gene.
+
+    Args:
+        gene_names (list): names of the genes in the count matrix.
+        gene_counts (np.ndarray): count matrix of barcodes x genes.
+
+    Returns:
+        genes (pd.DataFrame): metrics regarding each gene. 
+    """
+    
+    genes = pd.DataFrame({'genes': gene_names})
+    genes['n_barcodes'] = calc_barcode_per_gene(gene_counts)
+    genes['total_measures'] = calc_total_measures_per_gene(gene_counts)
+    genes['variance'] = calc_var_per_gene(gene_counts)
+    genes['index'] = np.arange(len(gene_names))
+
+    return genes
+
 
 ###############################################################################
 
