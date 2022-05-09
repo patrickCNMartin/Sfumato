@@ -3,6 +3,7 @@ import csv
 import numpy as np
 import pandas as pd
 
+from functools import reduce
 from typing import Generator
 
 ###############################################################################
@@ -46,7 +47,7 @@ def obtain_gene_names(readr: Generator, skip_fst_col: bool=True) -> tuple:
             row.
     """
 
-    headers = next(readr)[skip_fst_col+3]
+    headers = next(readr)[0][skip_fst_col+3:]
     return headers, readr
 
 
@@ -151,7 +152,7 @@ def calc_barcode_per_gene(gene_counts: np.ndarray) -> np.ndarray:
         np.ndarray: 1-D array of the number of barcodes that measured that gene.
     """
 
-    return np.sum(gene_counts > 0, axis=1)
+    return np.sum(gene_counts > 0, axis=0)
 
 
 def calc_total_measures_per_gene(gene_counts: np.ndarray) -> np.ndarray:
@@ -165,7 +166,7 @@ def calc_total_measures_per_gene(gene_counts: np.ndarray) -> np.ndarray:
         np.ndarray: 1-D array of the number of times each gene was measured.
     """
 
-    return np.sum(gene_counts, axis=1)
+    return np.sum(gene_counts, axis=0)
 
 
 def calc_var_per_gene(gene_counts: np.ndarray) -> np.ndarray:
@@ -178,7 +179,7 @@ def calc_var_per_gene(gene_counts: np.ndarray) -> np.ndarray:
         np.ndarray: 1-D array of the variance of the measure count of each gene.
     """
 
-    return np.var(gene_counts, axis=1)
+    return np.var(gene_counts, axis=0)
 
 
 def calc_gene_metrics(gene_names: list, 
@@ -204,12 +205,49 @@ def calc_gene_metrics(gene_names: list,
     return genes
 
 
+# ---------------------------- #
+#   data and metrics loader    #
+# ---------------------------- #
+
+def load_data(filename: str, delimiter: str=",", 
+                skip_fst_col: bool=True) -> tuple:
+    """Loads the data and calculates some basic metrics regarding the data.
+
+    Args:
+        filename (str): name and path of the file that contains the data.
+        delimiter (str, optional): delimiter of the fields of the datafile. 
+            Defaults to ",".
+        skip_fst_col (bool, optional): flag indicate whether to consider the 
+            first column or not. Defaults to True.
+
+    Returns:
+        count_matrix (np.ndarray): counts of the measures of the 
+            barcodes x genes.
+        barcode_met (pd.DataFrame): row-wise metrics (metrics regarding 
+            each barcode).
+        gene_met (np.ndarray):
+    """
+    
+    data = readr_generator(filename, delimiter)
+    gene_names, data = obtain_gene_names(data, skip_fst_col)
+    
+    def joiner(acc: tuple, row: list) -> tuple:
+        tags, gene_counts = sep_tag_counts(*row)
+        return (acc[0] + [calc_row_metrics(tags, gene_counts)],
+                acc[1] + [gene_counts])
+    
+    barcode_met, count_matrix = reduce(joiner, data, ([], []))
+    count_matrix = np.array(count_matrix)
+    gene_met = calc_gene_metrics(gene_names, count_matrix)
+
+    return count_matrix, pd.DataFrame(barcode_met), gene_met
+
+
 ###############################################################################
 
 if __name__ == '__main__':
     import time
     import resource
-    import functools
 
     time_start = time.perf_counter()
 
@@ -217,14 +255,11 @@ if __name__ == '__main__':
     # actual code
     ################################
     
-    d = readr_generator("../../data/Puck_190926_06_combined.csv")
-    next(d)
-    def z(t):
-        tags, gene_counts = sep_tag_counts(*t)
-        return calc_row_metrics(tags, gene_counts)
+    a, b, c = load_data("../../data/Puck_190926_06_combined.csv")
     
-    h = functools.reduce(lambda acc, j: acc + [z(j)], d, [])
-    print(pd.DataFrame(h).head(10))
+    b.head(n=5)
+    print()
+    c.head(n=5)
 
     ################################
     time_elapsed = (time.perf_counter() - time_start)
