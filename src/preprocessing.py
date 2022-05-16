@@ -4,8 +4,10 @@ import numpy as np
 import pandas as pd
 
 from math import ceil
-from functools import reduce
 from typing import Generator
+from functools import reduce, partial
+from sklearn import preprocessing
+
 
 ###############################################################################
 # loading data
@@ -385,7 +387,7 @@ def subset_df(df: pd.DataFrame, top: float, bottom: float) -> pd.DataFrame:
 #      rowwise filtering       #
 # ---------------------------- #
 
-def filter_top_barcodes(count_matrix: np.ndarray, 
+def filter_rel_barcodes(count_matrix: np.ndarray, 
                             barcode_metrics: pd.DataFrame, metric: str,
                             top: float=None, bottom: float=None) -> tuple:
     """Filters the count_matrix and the barcode metrics based on a column of the
@@ -434,7 +436,7 @@ def filter_top_barcodes(count_matrix: np.ndarray,
 #     columnwise filtering     #
 # ---------------------------- #
 
-def filter_top_genes(count_matrix: np.ndarray, gene_metrics: pd.DataFrame, 
+def filter_rel_genes(count_matrix: np.ndarray, gene_metrics: pd.DataFrame, 
                     metric: str, top: float=None, bottom: float=None) -> tuple:
     """Filters the count_matrix and the gene_metrics based on a metric of the 
     gene metrics. It obtains either the columns associated with the highest 
@@ -525,3 +527,70 @@ def filter_genes(count_matrix: np.ndarray, gene_metrics: pd.DataFrame,
     gene_metrics.reset_index()
 
     return count_matrix, gene_metrics
+
+
+###############################################################################
+# feature selection
+
+###############################################################################
+# data transformation
+
+# ---------------------------- #
+#     coordinate scalling      #
+# ---------------------------- #
+
+def min_max_scaling(column: pd.Series):
+    preprocessing.minmax_scale(column, copy=False)
+
+
+def scale_coord(barcode_metrics: pd.DataFrame):
+    barcode_metrics.x_coor = min_max_scaling(barcode_metrics.x_coor)
+    barcode_metrics.y_coor = min_max_scaling(barcode_metrics.y_coor)
+
+
+# ---------------------------- #
+#  gene count transformation   #
+# ---------------------------- #
+
+
+def robust_scaler(data: np.ndarray):
+    transformer = preprocessing.RobustScaler(copy=False).fit(data)
+    transformer.transform(data)
+
+
+def standardization(data: np.ndarray):
+    transformer = preprocessing.StandardScaler(copy=False).fit(data)
+    transformer.transform(data)
+
+
+def power_transform(data: np.ndarray, method: str):
+    if method not in {'yeo-johnson', 'box-cox'}:
+        raise ValueError('Methods is not acceptable. Available methods:' +
+                            '{\'yeo-johnson\', \'box-cox\'}')
+    
+    transformer = preprocessing.PowerTransformer(method=method, copy=False)
+    transformer.fit(data)
+    transformer.transform(data)
+
+
+def transform_data(data: np.ndarray, transformation: str):
+    transf = {'robust': robust_scaler, 'standard': standardization, 
+                'yeo-johnson': partial(power_transform, method=transformation), 
+                'box-cox': partial(power_transform, method=transformation),
+                'log': np.log, 'log10': np.log10}
+    
+    if transformation not in transf:
+        raise ValueError('Transformation is not acceptable. Available ' +
+                            f'transformations: {list(transf.keys())}')
+
+    if transformation.startswith("log"):
+        return transf[transformation](data)
+    
+    x, y = data.shape
+    data = data.reshape(-1,1)
+    transf[transformation](data)
+    return data.reshape(x, y)
+
+
+###############################################################################
+# embedded methods

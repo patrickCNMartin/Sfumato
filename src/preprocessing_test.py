@@ -12,21 +12,24 @@ if __name__ == '__main__':
     # actual code
     ################################
     
-    a, b, c = load_data("../../data/Puck_190926_06_combined.csv", 
-                min_genes_bc=1, max_var_bc=6)
+    # a, b, c = load_data("../../data/Puck_190926_06_combined.csv", 
+    #             min_genes_bc=1, max_var_bc=6)
     
-    print(b.head(n=5))
-    print()
-    print(c.head(n=5))
+    # print(b.head(n=5))
+    # print()
+    # print(c.head(n=5))
 
-    a, b = filter_top_barcodes(a, b, 'variance', 5, 5)
-    print()
-    print(b)
+    # a, b = filter_top_barcodes(a, b, 'variance', 5, 5)
+    # print()
+    # print(b)
 
-    a, c = filter_genes(a, c, 5, 1000, min_var=0.02, max_var=8)
-    print()
-    print(c.head(n=5))
+    # a, c = filter_genes(a, c, 5, 1000, min_var=0.02, max_var=8)
+    # print()
+    # print(c.head(n=5))
 
+    a = np.random.lognormal(size=(8,8))
+    z=transform_data(a, 'robust')
+    print(z)
 
     ################################
     time_elapsed = (time.perf_counter() - time_start)
