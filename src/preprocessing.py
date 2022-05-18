@@ -7,7 +7,7 @@ from math import ceil
 from typing import Generator
 from functools import reduce, partial
 from sklearn import preprocessing
-
+from scipy.stats import spearmanr
 
 ###############################################################################
 # loading data
@@ -402,11 +402,11 @@ def filter_rel_barcodes(count_matrix: np.ndarray,
         metric (str): column of the barcode metrics used to subset the 
             data.
         top (float, optional): if defined, corresponds to the number of rows 
-            associated with the highest values of the metric wanted. Defaults to
-            None.
+            associated with the highest values of the metric wanted in 
+            percentage. Defaults to None.
         bottom (float, optional):  if defined, corresponds to the number of rows 
-            associated with the lowest values of the metric wanted. Defaults to
-            None.
+            associated with the lowest values of the metric wanted in 
+            percentage. Defaults to None.
 
     Returns:
         count_matrix (np.ndarray): filtered matrix of the counts of measured 
@@ -427,7 +427,7 @@ def filter_rel_barcodes(count_matrix: np.ndarray,
     count_matrix = count_matrix[barcode_metrics.index, :]
     
     barcode_metrics.reset_index(inplace = True)
-    barcode_metrics.drop('index', axis=1, inplace=True) 
+    barcode_metrics = barcode_metrics.drop('index', axis=1) 
 
     return count_matrix, barcode_metrics
 
@@ -449,11 +449,11 @@ def filter_rel_genes(count_matrix: np.ndarray, gene_metrics: pd.DataFrame,
             total_measures, variance).
         metric (str): column of the gene metrics used to subset the data. 
         top (float, optional): if defined, corresponds to the number of columns 
-            associated with the highest values of the metric wanted. Defaults to
-            None.
+            associated with the highest values of the metric wanted in 
+            percentage. Defaults to None.
         bottom (float, optional):  if defined, corresponds to the number of 
-            columns associated with the lowest values of the metric wanted. 
-            Defaults to None.
+            columns associated with the lowest values of the metric wanted in 
+            percentage. Defaults to None.
 
     Returns:
         count_matrix (np.ndarray): filtered matrix of the counts of measured 
@@ -465,14 +465,15 @@ def filter_rel_genes(count_matrix: np.ndarray, gene_metrics: pd.DataFrame,
             bottom values have been defined.
     """
     
-    check_usage({'n_barcodes', 'total_measures', 'variance'})
-    gene_metrics.sort_values(metric, ascending=bottom != None)
+    check_usage({'n_barcodes', 'total_measures', 'variance'}, metric, top, 
+                bottom)
+    gene_metrics.sort_values(metric, ascending=top == None, inplace=True)
     gene_metrics = subset_df(gene_metrics, top, bottom)
     
-    count_matrix = count_matrix.iloc[:, gene_metrics.index]
+    count_matrix = count_matrix[:, gene_metrics.index]
 
     gene_metrics.reset_index(inplace=True)
-    gene_metrics.drop('index', axis=1, inplace=True)
+    gene_metrics = gene_metrics.drop('index', axis=1)
     
     return count_matrix, gene_metrics
 
@@ -518,19 +519,38 @@ def filter_genes(count_matrix: np.ndarray, gene_metrics: pd.DataFrame,
     if min_measures:
         gene_metrics = gene_metrics[gene_metrics.total_measures <= max_measures]
     
-    if min_bc:
+    if min_var:
         gene_metrics = gene_metrics[gene_metrics.variance >= min_var]
-    if min_bc:
+    if max_var:
         gene_metrics = gene_metrics[gene_metrics.variance <= max_var]
 
     count_matrix = count_matrix[:, gene_metrics.index]
-    gene_metrics.reset_index()
+    gene_metrics.reset_index(inplace=True)
+    gene_metrics.drop('index', axis=1, inplace=True)
 
     return count_matrix, gene_metrics
 
 
 ###############################################################################
 # feature selection
+
+def pearson_corr(data: np.ndarray) -> np.ndarray:
+    return np.corrcoef(data, rowvar=False)
+
+
+def spearman_corr(data: np.ndarray) -> np.ndarray:
+    return spearmanr(data)[0]
+
+
+def select_with_corr(data: np.ndarray, corr_method: str, threshold: float):
+    methods = {'pearson': pearson_corr, 'spearman': spearman_corr}
+    if corr_method not in methods:
+        raise ValueError(f"The corr_method chosen \'{corr_method}\' is not " +
+                            "of the available methods. Available methods are" +
+                            f" {list(methods.keys())}.")
+    
+    corr_matrix = methods[corr_method](data) >= (1 - threshold)
+
 
 ###############################################################################
 # data transformation
