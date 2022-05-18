@@ -540,10 +540,24 @@ def filter_genes(count_matrix: np.ndarray, gene_metrics: pd.DataFrame,
 # ---------------------------- #
 
 def min_max_scaling(column: pd.Series):
+    """Performs min-max scaling inplace on a column of a dataframe.
+
+    Args:
+        column (pd.Series): column of a dataframe to be scaled.
+    """
+
     preprocessing.minmax_scale(column, copy=False)
 
 
 def scale_coord(barcode_metrics: pd.DataFrame):
+    """Performs min-max scaling inplace to the x coordinates and y coordinates
+    of the barcodes in the provided dataframe (dataset).
+
+    Args:
+        barcode_metrics (pd.DataFrame): dataframe with the coordinates of the
+            barcode.
+    """
+
     barcode_metrics.x_coor = min_max_scaling(barcode_metrics.x_coor)
     barcode_metrics.y_coor = min_max_scaling(barcode_metrics.y_coor)
 
@@ -554,16 +568,43 @@ def scale_coord(barcode_metrics: pd.DataFrame):
 
 
 def robust_scaler(data: np.ndarray):
+    """Removes the median and scales the data in accordance with the 
+    interquartile range. The scaling is done inplace.
+
+    Args:
+        data (np.ndarray): data to be scaled.
+    """
+
     transformer = preprocessing.RobustScaler(copy=False).fit(data)
     transformer.transform(data)
 
 
 def standardization(data: np.ndarray):
+    """Removes the mean and scales the data in such a way that the variance is
+    reduced to 1. The standardization is made inplace.
+
+    Args:
+        data (np.ndarray): data to be standardized.
+    """
+
     transformer = preprocessing.StandardScaler(copy=False).fit(data)
     transformer.transform(data)
 
 
 def power_transform(data: np.ndarray, method: str):
+    """Performs transfomations on the data using either the Box-Cox or
+    the Yeo-Johnson method to make the data have a more normal shape. This 
+    transformation is done inplace.
+
+    Args:
+        data (np.ndarray): data to be transformed.
+        method (str): transformation to be done. Either \'yeo-johnson\' or 
+            \'box-cox'.
+
+    Raises:
+        ValueError: in case the method chosen is not one of the options.
+    """
+
     if method not in {'yeo-johnson', 'box-cox'}:
         raise ValueError('Methods is not acceptable. Available methods:' +
                             '{\'yeo-johnson\', \'box-cox\'}')
@@ -573,7 +614,27 @@ def power_transform(data: np.ndarray, method: str):
     transformer.transform(data)
 
 
-def transform_data(data: np.ndarray, transformation: str):
+def transform_data(data: np.ndarray, transformation: str) -> np.ndarray:
+    """Performs scaling or a transformation of the data inplace.
+
+    Args:
+        data (np.ndarray): data to be scaled or transformed.
+        transformation (str): scaling method or transfomation method to be 
+            applied. Options: robust - performs a robust scaling based on the 
+            median and interquartile region;  standard - performs 
+            standardization of the data (mean = 0, variance = 1); yeo-johnson -
+            performs yeo-johnson transformation; box-cox - performs box-cox 
+            transformation; log - performs the logaritmization of the data with 
+            the natural logarithm; log10 - performs the logaritmization of the
+            data with base 10.
+
+    Raises:
+        ValueError: in case the transformation chosen is not in the options.
+
+    Returns:
+        np.ndarray: transformed/scaled data. 
+    """
+
     transf = {'robust': robust_scaler, 'standard': standardization, 
                 'yeo-johnson': partial(power_transform, method=transformation), 
                 'box-cox': partial(power_transform, method=transformation),
