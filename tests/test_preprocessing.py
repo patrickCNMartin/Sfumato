@@ -1,4 +1,7 @@
-from ..src.preprocessing import *
+import sys
+sys.path.append('../src')
+
+from preprocessing import *
 
 ###############################################################################
 
@@ -12,12 +15,16 @@ if __name__ == '__main__':
     # actual code
     ################################
     
-    a, b, c = load_data("../../data/Puck_190926_06_combined.csv", 
-                min_genes_bc=5, min_var_bc=2)
+    g = loader("../../data/Puck_190926_06_combined.csv")[1]
+    cm, bc_met = filter_barcodes(g, {'counted_genes': 5, 'variance': 0.1})
+    print(cm.shape)
 
-    a, c = filter_genes(a, c, min_bc=5)
-    a, c = filter_rel_genes(a, c, metric='variance', top=30)
-    print(pearson_corr[:5,:10])
+    # a, c = filter_genes(a, c, min_bc=3, min_var=10)
+    # # print(a.shape)
+    
+    # a, c = filter_rel_genes(a, c, metric='variance', top=60)
+    # # print(a.shape)
+    # # print(spearman_corr(a)[:5,:10])
 
 
     ################################
