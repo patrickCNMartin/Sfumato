@@ -5,7 +5,7 @@ import numba as nb
 import pandas as pd
 
 from math import ceil
-from typing import Generator
+from typing import Generator, Iterable
 from functools import reduce, partial
 from sklearn import preprocessing
 from scipy.stats import spearmanr
@@ -38,6 +38,22 @@ def is_metric_possible(available_metrics: dict or set, metric: str):
                         "This metric is not available. The metric chosen " +
                         "must correspond to one of the" +
                         f" following metrics: {possible_metrics}")
+
+
+def check_multiple_metrics(available_metrics: dict, chosen_metrics: set):
+    """Checks if the chosen metrics are among the available metrics.
+
+    Args:
+        available_metrics (dict): available metrics to filter the data.
+        chosen_metrics (set): metrics chosen to filter the barcodes by.
+
+    Raises:
+        ValueError: error raised when a metric does not belong to the set of 
+            possible metrics.
+    """
+    
+    for metric in chosen_metrics:
+        is_metric_possible(available_metrics, metric)
 
 
 ###############################################################################
@@ -145,7 +161,7 @@ def loader(filename: str, delimiter: str=",", skip_fst_col: bool=True) -> tuple:
 ###############################################################################
 # metrics
 
-@nb.njit()
+@nb.njit
 def variance(vector: np.ndarray) -> float:
     """Wrapper for the numpy variance function.
 
@@ -159,7 +175,7 @@ def variance(vector: np.ndarray) -> float:
     return np.var(vector)
 
 
-@nb.njit()
+@nb.njit
 def dispersion_ratio(vector: np.ndarray) -> float:
     """Calculates the dispersion ratio (ratio of the arithmetic mean and the 
     geometric mean).
@@ -176,7 +192,7 @@ def dispersion_ratio(vector: np.ndarray) -> float:
     return np.mean(vector)/gm
 
 
-@nb.njit()
+@nb.njit
 def mad(vector: np.ndarray) -> float:
     """Calculates the mean absolute difference.
 
@@ -192,7 +208,6 @@ def mad(vector: np.ndarray) -> float:
 
 ###############################################################################
 # barcode filtering / row filtering
-
 
 # ------------------------------- #
 #  calculating barcode metrics    #
@@ -282,9 +297,9 @@ def calc_row_metrics(tags: dict, gene_counts: np.ndarray, metrics: set,
     return tags
 
 
-# --------------------------------------------- #
-# filtering barcode metrics on absolute values  #
-# --------------------------------------------- #
+# -------------------------------------- #
+# filtering barcodes on absolute values  #
+# -------------------------------------- #
 
 def filter_abs_barcodes(tags: dict, min: dict, max: dict) -> bool:
     """Filters barcodes based on absolute values of the defined metrics.
@@ -313,9 +328,9 @@ def filter_abs_barcodes(tags: dict, min: dict, max: dict) -> bool:
     return True
 
 
-# --------------------------------------------- #
-# filtering barcode metrics on relative values  #
-# --------------------------------------------- #
+# -------------------------------------- #
+# filtering barcodes on relative values  #
+# -------------------------------------- #
 
 def subset_df(df: pd.DataFrame, top: float, bottom: float) -> pd.DataFrame:
     """Subsets a sorted dataframe into its top rows and bottom rows if they
@@ -385,56 +400,43 @@ def filter_rel_bc_on_metric(count_matrix: np.ndarray,
     return count_matrix, barcode_metrics
 
 
-def filter_rel_bc(cm: np.ndarray, bc_met: pd.DataFrame, bc_top: dict, 
-                    bc_bottom: dict) -> tuple:
+def filter_rel_mult_met(cm: np.ndarray, met_df: pd.DataFrame, top_met: dict, 
+                            bottom_met: dict, rel_filt_func: callable) -> tuple:
     """Performs filtering based on the relative value of each metric given in 
     bc_bottom and/or bc_top of the barcode.
 
     Args:
         cm (np.ndarray): count matrix of the genes for each barcode. Matrix 
             (barcode x genes).
-        bc_met (pd.DataFrame): dataframe of barcodes, x coordinate, y coordinate
-            and their associated metrics.
-        bc_top (dict): percentage of barcodes with the highest value of each 
+        met_df (pd.DataFrame): dataframe metrics.
+        top_met (dict): percentage of elements with the highest value of each 
             metric that are to be used in the downstream analysis. 
-        bc_bottom (dict): percentage of barcodes with the lowest value of each 
+        bottom_met (dict): percentage of elements with the lowest value of each 
             metric that are to be used in the downstream analysis.
+        rel_filt_func (callable): function that is going to filter the count 
+            matrix and the dataframe of metrics based on the relative values 
+            given.
 
     Returns:
-        cm (np.ndarray): filtered count matrix with only the barcodes
+        cm (np.ndarray): filtered count matrix with only the columns/rows
             that fall in a given range from the highest values and/or lowest 
             values of each specified metric.
-        bc_met (pd.DataFrame): filtered barcode metrics with only the barcodes
-            that fall in a given range from the highest values and/or lowest 
-            values of each specified metric.
+        met_df (pd.DataFrame): filtered metrics dataframe with only the 
+            columns/rows that fall in a given range from the highest values 
+            and/or lowest values of each specified metric.
     """
 
-    for metric in bc_top.keys() | bc_bottom.keys():
-        top = bc_top[metric] if metric in bc_top else None
-        bottom = bc_bottom[metric] if metric in bc_bottom else None
-        cm, bc_met = filter_rel_bc_on_metric(cm, bc_met, metric, top, bottom)
+    for metric in top_met.keys() | bottom_met.keys():
+        top = top_met[metric] if metric in top_met else None
+        bottom = bottom_met[metric] if metric in bottom_met else None
+        cm, met_df = rel_filt_func(cm, met_df, metric, top, bottom)
     
-    return cm, bc_met
+    return cm, met_df
 
 
 # ---------------------------- #
 #      barcode filtering       #
 # ---------------------------- #
-
-def check_bc_filter_metrics(available_metrics: dict, chosen_metrics: set):
-    """Checks if the chosen metrics are among the available metrics.
-
-    Args:
-        available_metrics (dict): available metrics to filter the data.
-        chosen_metrics (set): metrics chosen to filter the barcodes by.
-
-    Raises:
-        ValueError: error raised when a metric does not belong to the set of 
-            possible metrics.
-    """
-    
-    for metric in chosen_metrics:
-        is_metric_possible(available_metrics, metric)
 
 
 def filter_barcodes(barcodes: Generator, bc_min: dict={}, bc_max: dict={}, 
@@ -481,7 +483,7 @@ def filter_barcodes(barcodes: Generator, bc_min: dict={}, bc_max: dict={},
     chosen_metrics = (bc_min.keys() | bc_max.keys() | bc_bottom.keys() |
                         bc_top.keys())
     
-    check_bc_filter_metrics(metrics, chosen_metrics)
+    check_multiple_metrics(metrics, chosen_metrics)
     
     rw_met_f = lambda row: (calc_row_metrics(row[0], row[1], chosen_metrics, 
                                                 metrics), row[1])
@@ -493,16 +495,16 @@ def filter_barcodes(barcodes: Generator, bc_min: dict={}, bc_max: dict={},
 
     count_matrix = np.array(count_matrix)
     barcode_met = pd.DataFrame(barcode_met)
-    return filter_rel_bc(count_matrix, barcode_met, bc_top, bc_bottom)
+    return filter_rel_mult_met(count_matrix, barcode_met, bc_top, bc_bottom,
+                                filter_rel_bc_on_metric)
 
 
 ###############################################################################
 # gene filtering / columnn filtering
 
-
-# ---------------------------- #
-#        gene metrics          #
-# ---------------------------- #
+# ------------------------------- #
+#     calculating gene metrics    #
+# ------------------------------- #
 
 def calc_barcode_per_gene(gene_counts: np.ndarray) -> np.ndarray:
     """Calculates the number of barcodes that contain each gene.
@@ -544,34 +546,102 @@ def calc_var_per_gene(gene_counts: np.ndarray) -> np.ndarray:
     return np.var(gene_counts, axis=0)
 
 
-def calc_gene_metrics(gene_names: list, 
-                        gene_counts: np.ndarray) -> pd.DataFrame:
-    """Constructs a dataframe with the metrics regarding each gene. Namely, it
-    includes the number of barcodes the measure each gene, the total number of
-    measures of each gene and the variance in the measures of each gene.
+def calc_dispersion_per_gene(gene_counts: np.ndarray) -> np.ndarray:
+    """Calculates the dispersion ratio (ratio of the arithmetic mean to the 
+    geometric mean) of the measures of each gene.
+
+    Args:
+        gene_counts (np.ndarray): count matrix of barcodes x genes.
+
+    Returns:
+        np.ndarray: 1-D array of the dispersion of the measure count of each 
+            gene.
+    """
+
+    return np.apply_along_axis(dispersion_ratio, 0, gene_counts)
+
+
+def calc_mad_per_gene(gene_counts: np.ndarray) -> np.ndarray:
+    """Calculates the mean average deviation (MAD) of the measures of each gene.
+
+    Args:
+        gene_counts (np.ndarray): count matrix of barcodes x genes.
+
+    Returns:
+        np.ndarray: 1-D array of the MAD of the measure count of each gene.
+    """
+
+    return np.apply_along_axis(mad, 0, gene_counts)
+
+
+def calc_gene_metrics(gene_names: list, gene_counts: np.ndarray, 
+                        metrics: Iterable, metric_funcs: dict) -> pd.DataFrame:
+    """Constructs a dataframe with the specified metrics regarding each gene.
 
     Args:
         gene_names (list): names of the genes in the count matrix.
         gene_counts (np.ndarray): count matrix of barcodes x genes.
+        metrics (Iterable[str]): names of the metrics to be calculated.
+        metric_funcs (dict[str] -> Callable): names of the metrics associated 
+            with the functions that calculate those metrics for each gene.
 
     Returns:
-        genes (pd.DataFrame): metrics regarding each gene. 
+        genes (pd.DataFrame): specified metrics regarding each gene. 
     """
     
     genes = pd.DataFrame({'genes': gene_names})
-    genes['n_barcodes'] = calc_barcode_per_gene(gene_counts)
-    genes['total_measures'] = calc_total_measures_per_gene(gene_counts)
-    genes['variance'] = calc_var_per_gene(gene_counts)
+    
+    for metric in metrics:
+        genes[metric] = metric_funcs[metric](gene_counts)
 
     return genes
 
 
-# ---------------------------- #
-#     columnwise filtering     #
-# ---------------------------- #
+# ----------------------------------- #
+# filtering genes on absolute values  #
+# ----------------------------------- #
 
-def filter_rel_genes(count_matrix: np.ndarray, gene_metrics: pd.DataFrame, 
-                    metric: str, top: float=None, bottom: float=None) -> tuple:
+def filter_abs_genes(count_matrix: np.ndarray, gene_metrics: pd.DataFrame, 
+                        gene_min: dict, gene_max: dict) -> tuple:
+    """Filters the genes based on the pure value of the metrics (as posed to 
+    based on the comparison of values).
+
+    Args:
+        count_matrix (np.ndarray): matrix of the counts of measured genes in 
+            each barcode (barcode x genes).
+        gene_metrics (pd.DataFrame): gene metrics (genes, n_barcodes, 
+            total_measures, variance).
+        gene_min (dict): metrics (key) for which a minimum value (value) is 
+            required for a gene to be included in the downstream analysis.
+        gene_max (dict): metrics (key) for which a maximum value (value) is 
+            required for a gene to be included in the downstream analysis.
+
+    Returns:
+        count_matrix (np.ndarray): filtered matrix of the counts of measured 
+            genes in each barcode (barcode x genes).
+        gene_metrics (pd.DataFrame): filtered dataframe of gene metrics.
+    """
+    
+    for metric in gene_min:
+        gene_metrics = gene_metrics[gene_metrics[metric] >= gene_min[metric]]
+    
+    for metric in gene_max:
+        gene_metrics = gene_metrics[gene_metrics[metric] <= gene_max[metric]]
+
+    count_matrix = count_matrix[:, gene_metrics.index]
+    gene_metrics.reset_index(inplace=True)
+    gene_metrics.drop('index', axis=1, inplace=True)
+
+    return count_matrix, gene_metrics
+
+
+# ----------------------------------- #
+# filtering genes on relative values  #
+# ----------------------------------- #
+
+def filter_rel_genes_on_metric(count_matrix: np.ndarray, 
+                                gene_metrics: pd.DataFrame, metric: str, 
+                                top: float=None, bottom: float=None) -> tuple:
     """Filters the count_matrix and the gene_metrics based on a metric of the 
     gene metrics. It obtains either the columns associated with the highest 
     values of the defined metric, the lowest values or both.
@@ -593,14 +663,8 @@ def filter_rel_genes(count_matrix: np.ndarray, gene_metrics: pd.DataFrame,
         count_matrix (np.ndarray): filtered matrix of the counts of measured 
             genes in each barcode (barcode x genes).
         gene_metrics (pd.DataFrame): filtered dataframe of gene metrics.
-    
-    Raises:
-        ValueError: if an unavailable metric was used or neither the top or 
-            bottom values have been defined.
     """
-    
-    check_usage({'n_barcodes', 'total_measures', 'variance'}, metric, top, 
-                bottom)
+
     gene_metrics.sort_values(metric, ascending=top == None, inplace=True)
     gene_metrics = subset_df(gene_metrics, top, bottom)
     
@@ -612,57 +676,59 @@ def filter_rel_genes(count_matrix: np.ndarray, gene_metrics: pd.DataFrame,
     return count_matrix, gene_metrics
 
 
-def filter_genes(count_matrix: np.ndarray, gene_metrics: pd.DataFrame, 
-                    min_bc: int=None, max_bc: int=None, min_measures: int=None, 
-                    max_measures: int=None, min_var: float=None, 
-                    max_var: float=None) -> tuple:
-    """Filters the genes based on the pure value of the metrics (as posed to 
-    based on the comparison of values).
+# ---------------------------- #
+#       gene filtering         #
+# ---------------------------- #
+
+def filter_genes(gene_names: list, count_matrix: np.ndarray, gene_min: dict={}, 
+                    gene_max: dict={}, gene_bottom: dict={}, 
+                    gene_top: dict={}) -> tuple:
+    """Constructs a dataframe of specified metrics regarding each gene and 
+    filters those genes and the count matrix based on the absolute values of 
+    those metrics or relative to each other.
 
     Args:
-        count_matrix (np.ndarray): matrix of the counts of measured genes in 
-            each barcode (barcode x genes).
-        gene_metrics (pd.DataFrame): gene metrics (genes, n_barcodes, 
-            total_measures, variance).
-        min_bc (int, optional): minimum number of barecodes for a gene to be 
-            considered. Defaults to None.
-        max_bc (int, optional): maximum number of barecodes that can detect that 
-            gene for it is to be removed. Defaults to None.
-        min_measures (int, optional): minimum number of total measurements of 
-            the gene for it to be included. Defaults to None.
-        max_measures (int, optional): maximum number possible of total 
-            measurements before the gene is to be excluded. Defaults to None.
-        min_var (float, optional): minimum variance required for a gene to be 
-            included. Defaults to None.
-        max_var (float, optional): maximum variance possible of gene before it 
-            is to be excluded. Defaults to None.
+        gene_names (list[str]): names of the genes counted.
+        count_matrix (np.ndarray): counts of the genes (barcode x genes).
+        gene_min (dict, optional): metrics (key) for which a minimum value 
+            (value) is required for a gene to be included in the downstream 
+            analysis. Defaults to {}.
+        gene_max (dict, optional): metrics (key) for which a maximum value 
+            (value) is required for a gene to be included in the downstream 
+            analysis. Defaults to {}.
+        gene_top (dict, optional): percentage of genes with the highest value 
+            of each metric that are to be used in the downstream analysis.
+            Defaults to {}.
+        gene_bottom (dict, optional): percentage of genes with the lowest value
+            of each metric that are to be used in the downstream analysis.
+            Defaults to {}.
 
     Returns:
-        count_matrix (np.ndarray): filtered matrix of the counts of measured 
-            genes in each barcode (barcode x genes).
-        gene_metrics (pd.DataFrame): filtered dataframe of gene metrics.
+        count_matrix (np.ndarray): filtered count matrix with only the genes
+            that fall in a given range from the highest values and/or lowest 
+            values of each specified metric and with the values within a 
+            specified range of values specified by the given metrics.
+        gene_metrics (pd.DataFrame): filtered gene metrics with only the genes 
+            that fall in a given range from the highest values and/or lowest 
+            values of each specified metric and with the values within a 
+            specified range of values specified by the given metrics.
     """
-    
-    if min_bc:
-        gene_metrics = gene_metrics[gene_metrics.n_barcodes >= min_bc]
-    if max_bc:
-        gene_metrics = gene_metrics[gene_metrics.n_barcodes <= max_bc]
-    
-    if min_measures:
-        gene_metrics = gene_metrics[gene_metrics.total_measures >= min_measures]
-    if min_measures:
-        gene_metrics = gene_metrics[gene_metrics.total_measures <= max_measures]
-    
-    if min_var:
-        gene_metrics = gene_metrics[gene_metrics.variance >= min_var]
-    if max_var:
-        gene_metrics = gene_metrics[gene_metrics.variance <= max_var]
 
-    count_matrix = count_matrix[:, gene_metrics.index]
-    gene_metrics.reset_index(inplace=True)
-    gene_metrics.drop('index', axis=1, inplace=True)
+    metrics = {'bc_counted': calc_barcode_per_gene, 
+                'total_measures': calc_total_measures_per_gene, 
+                'variance': calc_var_per_gene, 'mad': calc_mad_per_gene,
+                'dispersion': calc_dispersion_per_gene}
+    chosen_metrics = (gene_min.keys() | gene_max.keys() | gene_bottom.keys() | 
+                        gene_top.keys())
+    check_multiple_metrics(metrics, chosen_metrics)
 
-    return count_matrix, gene_metrics
+    gene_metrics = calc_gene_metrics(gene_names, count_matrix, chosen_metrics,
+                                        metrics)
+    count_matrix, gene_metrics = filter_abs_genes(count_matrix, gene_metrics,
+                                                    gene_min, gene_max)
+    
+    return filter_rel_mult_met(count_matrix, gene_metrics, gene_top, 
+                                gene_bottom, filter_rel_genes_on_metric)
 
 
 ###############################################################################

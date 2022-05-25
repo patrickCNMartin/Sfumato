@@ -16,15 +16,13 @@ if __name__ == '__main__':
     ################################
     
     g = loader("../../data/Puck_190926_06_combined.csv")[1]
-    cm, bc_met = filter_barcodes(g, {'counted_genes': 5, 'variance': 0.1})
-    print(cm.shape)
-
-    # a, c = filter_genes(a, c, min_bc=3, min_var=10)
-    # # print(a.shape)
-    
-    # a, c = filter_rel_genes(a, c, metric='variance', top=60)
-    # # print(a.shape)
-    # # print(spearman_corr(a)[:5,:10])
+    cm, bc_met = filter_barcodes(g, bc_min={'counted_genes': 5, 
+                                            'variance': 0.01},
+                                    bc_max={'variance':4},
+                                    bc_top={'total_counts': 50})
+    print(bc_met.head(10))
+    print(f"Size of the matrix {cm.shape}")
+    print()
 
 
     ################################
