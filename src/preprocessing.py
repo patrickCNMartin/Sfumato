@@ -6,38 +6,43 @@ import pandas as pd
 
 from math import ceil
 from typing import Generator, Iterable
-from functools import reduce, partial
+from random import choice
 from sklearn import preprocessing
+from functools import reduce, partial
+from collections import deque
 from scipy.stats import spearmanr
 
 
 ###############################################################################
 # implementing robustness
 
-def is_metric_possible(available_metrics: dict or set, metric: str):
-    """Checks if a given metric is part of the available metrics. In case it is
-    not, it raises an error.
+def is_chosen_available(available: dict or set, chosen: str, metric: bool):
+    """Checks if a given metric or method is part of the available 
+    metrics/methods. In case it is not, it raises an error.
 
     Args:
-        available_metrics (dict or set): metrics that are available to be used.
-        metric (str): metric chosen to be used.
+        available (dict or set): metrics or methods that are available to be 
+            used.
+        chosen (str): metric or method chosen to be used.
+        metric (bool): flag indicating if the value chosen is a metric or a 
+            method. If it is true, it indicates that the value chosen is a 
+            metric. If it is false, it indicates that the value chosen is a 
+            method.
 
     Raises:
-        ValueError: error raised when a metric does not belong to the set of 
-            possible metrics.
+        ValueError: error raised when a metric or method does not belong to the 
+            set of possible metrics/methods.
     """
-    if metric in available_metrics:
+    if chosen in available:
         return None
 
-    if available_metrics is set:
-        possible_metrics = available_metrics
-    else:
-        possible_metrics = available_metrics.keys()
+    possible = available if available is set else available.keys()
+    name = "metric" if metric else "method"
 
-    raise ValueError(f"You chose the following metric: '{metric}'." +
-                        "This metric is not available. The metric chosen " +
-                        "must correspond to one of the" +
-                        f" following metrics: {possible_metrics}")
+    raise ValueError(f"You chose the following {name}: '{chosen}'." +
+                        f"This {name} is not available. The {name} chosen " +
+                        "must correspond to one of the following " +
+                        f"{name}s: {possible}")
 
 
 def check_multiple_metrics(available_metrics: dict, chosen_metrics: set):
@@ -53,7 +58,7 @@ def check_multiple_metrics(available_metrics: dict, chosen_metrics: set):
     """
     
     for metric in chosen_metrics:
-        is_metric_possible(available_metrics, metric)
+        is_chosen_available(available_metrics, metric, True)
 
 
 ###############################################################################
@@ -748,22 +753,222 @@ def filter_genes(gene_names: list, count_matrix: np.ndarray, gene_min: dict={},
 ###############################################################################
 # feature selection
 
+# ------------------------------- #
+#       correlation methods       #
+# ------------------------------- #
+
 def pearson_corr(data: np.ndarray) -> np.ndarray:
+    """Calculates the Pearson correlation coefficient between the columns of a 
+    given matrix.
+
+    Args:
+        data (np.ndarray): matrix of values, where the columns are to be tested
+            regarding correlation.
+
+    Returns:
+        np.ndarray: matrix of correlation, where the position (i,j) indicates 
+            the Pearson correlation coefficient for the columns i and j.
+    """
+
     return np.corrcoef(data, rowvar=False)
 
 
 def spearman_corr(data: np.ndarray) -> np.ndarray:
+    """Calculates the Spearman's Rank correlation coefficient between the 
+    columns of a given matrix. Wrapper for the spearmnr function of the scipy 
+    package.
+
+    Args:
+        data (np.ndarray): matrix of values, where the columns are to be tested
+            regarding correlation.
+
+    Returns:
+        np.ndarray: matrix of correlation, where the position (i,j) indicates 
+            the Spearman's Rank correlation coeficient for the columns i and j.
+    """
+
     return spearmanr(data)[0]
 
 
-def select_with_corr(data: np.ndarray, corr_method: str, threshold: float):
-    methods = {'pearson': pearson_corr, 'spearman': spearman_corr}
-    if corr_method not in methods:
-        raise ValueError(f"The corr_method chosen \'{corr_method}\' is not " +
-                            "of the available methods. Available methods are" +
-                            f" {list(methods.keys())}.")
+# --------------------------------- #
+#  bag removal of correlated genes  #
+# --------------------------------- #
+
+def find_corr_cols(bool_corr_matrix: np.ndarray) -> dict:
+    """Transforms the boolean matrix of correlation (matrix of correlation 
+    evaluated for a certain treshold) into a dictionary, where the correlations
+    of columns are not repeated.
+
+    Args:
+        bool_corr_matrix (np.ndarray): boolean matrix of correlation where at
+            position (i,j) there is either a True or a False indicating if the
+            columns i and j are correlated or not, respectively.
+
+    Returns:
+        corr_centers (dict[int] -> set[int]): dictionary where the keys are the
+            indexes of the columns and the values of the dictionary are the 
+            indexes of the columns that correlate with the column of the key. 
     
-    corr_matrix = methods[corr_method](data) >= (1 - threshold)
+    Ensures:
+        corr_centers: let i and j be the indexes of the column i and j, 
+            respectively, and i < j. If i and j are correlated, j will appear
+            in the dictionary as a value associated with the i key, but the 
+            reverse will not happen: i will not be a value in the dictionary 
+            associated with the j key. 
+    """
+
+    side = bool_corr_matrix.shape[0]
+    corr_centers = {}
+
+    for row in np.arange(side-1):
+        for col in np.arange(row+1, side):
+            if bool_corr_matrix[row][col]:
+                if row in corr_centers:
+                    corr_centers[row].add(col)
+                else:
+                    corr_centers[row] = {col}
+    
+    return corr_centers
+
+
+def filling_bag(corr_centers: dict, bags: list, passed_centers: set, index: int, 
+                queue: deque):
+    """Finds all the columns that should be in a certain bag and adds them 
+    inplace.
+
+    Args:
+        corr_centers (dict): dictionary with the columns that are correlated.
+        bags (list): list of bags.
+        passed_centers (set): columns whose correlations have already been 
+            considered.
+        index (int): index of the current bag.
+        queue (deque): columns whose correlations are still to be evaluated.
+    """
+        
+    while len(queue) > 0:
+        curr = queue.popleft()
+        
+        if curr in passed_centers:
+            continue
+        passed_centers.add(curr)
+
+        bags[index] |= corr_centers[curr]
+        queue.extend(corr_centers[curr])
+
+
+def getting_bags(corr_centers: dict) -> list:
+    """Converts the dictionary of correlations into a list of 'bags' where each
+    bag corresponds to a collection of the columns that are connected either 
+    directly because they correlate to each other or because some columns that
+    they are correlated with are correlated themselves.
+
+    Args:
+        corr_centers (dict): dictionary of correlations.
+
+    Returns:
+        bags (list[set]): sets of columns that are correlated either directly or
+            indirectly.
+    """
+
+    bags = []
+    passed_centers = set()
+    index = 0
+
+    for center in corr_centers:
+        if center in passed_centers:
+            continue
+        
+        passed_centers.add(center)
+        bags.append(corr_centers[center])
+        bags[index].add(center)
+        
+        queue = deque(corr_centers[center])
+        filling_bag(corr_centers, bags, passed_centers, index, queue)
+
+        index += 1
+    return bags
+
+
+def removing_cols_from_bags(bags: list) -> set:
+    """Picks one column at random from each bag and removes it from the bag.
+    Then joins all the remaining columns of the bags.
+
+    Args:
+        bags (list): sets of columns that are correlated either directly or
+            indirectly.
+
+    Returns:
+        cols_2_rm (set): columns of the bags that weren't picked.
+    """
+
+    cols_2_rm = set()
+    for bag in bags:
+        col = choice(list(bag))
+        cols_2_rm |= bag - {col}
+
+    return cols_2_rm
+
+
+def bag_approach(bool_corr_matrix: np.ndarray) -> list:
+    """Takes a bag approach to the removal of correlated/redundant genes. It 
+    makes the assumption that if A and B are correlated, B and C are correlated,
+    but A and C are not correlated, then the samples of A and B are not 
+    correlated, but they represent populations that indeed are. So, A, B and C 
+    will be treated as if they were all correlated amongst each other.
+
+    Args:
+        bool_corr_matrix (np.ndarray): boolean matrix of correlation where at
+            position (i,j) there is either a True or a False indicating if the
+            columns i and j are correlated or not, respectively.
+
+    Returns:
+        list: indexes of the genes/columns that are to be kept (should not be
+            removed).
+    """
+    corr_centers = find_corr_cols(bool_corr_matrix)
+    bags = getting_bags(corr_centers)
+    cols_2_rm = removing_cols_from_bags(bags)
+    return [i for i in np.arange(bool_corr_matrix.shape[0]) 
+                if i not in cols_2_rm]
+
+
+# ------------------------------- #
+#  removal of correlated genes    #
+# ------------------------------- #
+
+def select_with_corr(cm: np.ndarray, gene_met: pd.DataFrame, corr_method: str, 
+                        threshold: float, keep_method: str) -> tuple:
+    """Determines the redundancy of genes based on their correlation scores 
+    and removes redundant genes.
+
+    Args:
+        cm (np.ndarray): count matrix (barcodes x genes).
+        gene_met (pd.DataFrame): gene metrics.
+        corr_method (str): method to calculate the correlations of the genes.
+        threshold (float): value above which genes are to be considered 
+            correlated.
+        keep_method (str): method that will decide how correlated genes should
+            be eliminated.
+
+    Returns:
+        cm (np.ndarray): count matrix without redundant genes.
+        gene_met (pd.DataFrame): gene metrics without redundant genes.
+    """
+    
+    avail_corr_methods = {'pearson': pearson_corr, 'spearman': spearman_corr}
+    is_chosen_available(avail_corr_methods, corr_method, False)
+
+    avail_keep_methods = {'bag': bag_approach}
+    is_chosen_available(avail_keep_methods, keep_method, False)
+    
+    corr_matrix = avail_corr_methods[corr_method](cm) >= (1 - threshold)
+    genes_2_keep = avail_keep_methods[keep_method](corr_matrix)
+
+    gene_met = gene_met.iloc[genes_2_keep]
+    gene_met.reset_index(inplace=True)
+    gene_met = gene_met.drop('index', axis=1)
+
+    return cm[:,genes_2_keep], gene_met
 
 
 ###############################################################################
@@ -874,9 +1079,7 @@ def transform_data(data: np.ndarray, transformation: str) -> np.ndarray:
                 'box-cox': partial(power_transform, method=transformation),
                 'log': np.log, 'log10': np.log10}
     
-    if transformation not in transf:
-        raise ValueError('Transformation is not acceptable. Available ' +
-                            f'transformations: {list(transf.keys())}')
+    is_chosen_available(transf, transformation, False)
 
     if transformation.startswith("log"):
         return transf[transformation](data)
