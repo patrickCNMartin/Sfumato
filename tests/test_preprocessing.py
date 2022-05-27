@@ -87,35 +87,82 @@ class TestCorrelatedRemoval(unittest.TestCase):
         solution = [(0,1), (3,4)]
         self.assertEqual(find_corr_cols(bool_corr_matrix), solution)
 
+    
+    # --------------------------------------- #
+    #  tests for the function getting_bags    #
+    # --------------------------------------- #
+
+    def test_getting_bags_EMPTY(self):
+        edges = []
+        solution = []
+        self.assertEqual(getting_bags(edges), solution)
+    
+
+    def test_getting_bags_1_EDGE(self):
+        edges = [(0,1)]
+        solution = [{0,1}]
+        self.assertEqual(getting_bags(edges), solution)
+    
+
+    def test_getting_bags_2_SEQ_EDGES(self):
+        edges = [(0,1), (1,2)]
+        solution = [{0,1,2}]
+        self.assertEqual(getting_bags(edges), solution)
+    
+
+    def test_getting_bags_3_NEST_EDGES(self):
+        edges = [(0,1), (0,2), (2,3)]
+        solution = [{0,1,2,3}]
+        self.assertEqual(getting_bags(edges), solution)
+    
+
+    def test_getting_bags_2_BAGS_1_EDGE(self):
+        edges = [(0,1), (2,3)]
+        solution = [{0,1}, {2,3}]
+        self.assertEqual(getting_bags(edges), solution)
+    
+
+    def test_getting_bags_2_BAGS_MULT_EDGES(self):
+        edges = [(0,1), (1,2), (3,4), (4,5)]
+        solution = [{0,1,2}, {3,4,5}]
+        self.assertEqual(getting_bags(edges), solution)
+    
+
+    def test_getting_bags_2_BAGS_NEST_EDGES(self):
+        edges = [(0,1), (1,2), (1,3), (1,4), (3,4), (4,5), (7,8), (7,9), (8,12)]
+        solution = [{0,1,2,3,4,5}, {7,8,9,12}]
+        self.assertEqual(getting_bags(edges), solution)
+
+
 
 
 ###############################################################################
 
 if __name__ == '__main__':
-    import time
-    import resource
+    # import time
+    # import resource
 
-    time_start = time.perf_counter()
+    # time_start = time.perf_counter()
 
-    ################################
-    # actual code
-    ################################
+    # ################################
+    # # actual code
+    # ################################
     
-    g = loader("../../data/Puck_190926_06_combined.csv")[1]
-    cm, bc_met = filter_barcodes(g, bc_min={'counted_genes': 5, 
-                                            'variance': 0.01},
-                                    bc_max={'variance':4},
-                                    bc_top={'total_counts': 50})
-    print(bc_met.head(10))
-    print(f"Size of the matrix {cm.shape}")
-    print()
+    # g = loader("../../data/Puck_190926_06_combined.csv")[1]
+    # cm, bc_met = filter_barcodes(g, bc_min={'counted_genes': 5, 
+    #                                         'variance': 0.01},
+    #                                 bc_max={'variance':4},
+    #                                 bc_top={'total_counts': 50})
+    # print(bc_met.head(10))
+    # print(f"Size of the matrix {cm.shape}")
+    # print()
 
 
-    ################################
-    time_elapsed = (time.perf_counter() - time_start)
-    memMb=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss/1024.0/1024.0
-    print ("%5.1f secs %5.1f MByte" % (time_elapsed,memMb))
-    print()
+    # ################################
+    # time_elapsed = (time.perf_counter() - time_start)
+    # memMb=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss/1024.0/1024.0
+    # print ("%5.1f secs %5.1f MByte" % (time_elapsed,memMb))
+    # print()
     
     print("")
 

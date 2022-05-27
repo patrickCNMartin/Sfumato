@@ -838,16 +838,15 @@ def getting_bags(corr_centers: list) -> list:
     bags = []
     index = 0
     for x, y in corr_centers:
-        if x in bags[index]:
+        if len(bags) == 0:
+            bags.append(set((x,y)))
+        
+        elif x in bags[index]:
             bags[index].add(y)
         
-        elif y in bags[index]:
-            bags[index].add(x)
-        
         else:
-            if len(bags) != 0:
-                index += 1
             bags.append(set((x,y)))
+            index += 1
 
     return bags
 
