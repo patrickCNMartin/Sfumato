@@ -5,6 +5,7 @@ import sys
 sys.path.append('../src')
 
 from preprocessing import *
+from unittest.mock import patch
 
 
 ###############################################################################
@@ -132,37 +133,80 @@ class TestCorrelatedRemoval(unittest.TestCase):
         edges = [(0,1), (1,2), (1,3), (1,4), (3,4), (4,5), (7,8), (7,9), (8,12)]
         solution = [{0,1,2,3,4,5}, {7,8,9,12}]
         self.assertEqual(getting_bags(edges), solution)
+    
+
+    # -------------------------------------------------- #
+    #   tests for the function removing_cols_from_bags   #
+    # -------------------------------------------------- #
+
+    def test_removing_cols_from_bags_EMPTY(self):
+        bags = []
+        solution = set()
+        self.assertEqual(removing_cols_from_bags(bags), solution)
 
 
+    @patch('preprocessing.choice', lambda x: 0)
+    def test_removing_cols_from_bags_2_ELEM_1_BAG_0(self):
+        bags = [{0,1}]
+        solution = {1}
+        self.assertEqual(removing_cols_from_bags(bags), solution)
+    
+
+    @patch('preprocessing.choice', lambda x: 1)
+    def test_removing_cols_from_bags_2_ELEM_1_BAG_1(self):
+        bags = [{0,1}]
+        solution = {0}
+        self.assertEqual(removing_cols_from_bags(bags), solution)
+    
+
+    @patch('preprocessing.choice', lambda x: 5)
+    def test_removing_cols_from_bags_4_ELEM_1_BAG(self):
+        bags = [{0,1,5,6}]
+        solution = {0,1,6}
+        self.assertEqual(removing_cols_from_bags(bags), solution)
+    
+
+    @patch('preprocessing.choice', lambda x: 3)
+    def test_removing_cols_from_bags_MULT_ELEM_2_BAG(self):
+        bags = [{0,1,2,4,5,3}, {10,12,14,3,140}]
+        solution = {0,1,2,4,5,10,12,14,140}
+        self.assertEqual(removing_cols_from_bags(bags), solution)
+    
+
+    @patch('preprocessing.choice', lambda x: 10)
+    def test_removing_cols_from_bags_MULT_ELEM_MULT_BAGS(self):
+        bags = [{0,4,10}, {7, 40, 10}, {6,2,10}, {8,33,10}]
+        solution = {0,2,4,6,7,8,33,40}
+        self.assertEqual(removing_cols_from_bags(bags), solution)
 
 
 ###############################################################################
 
 if __name__ == '__main__':
-    # import time
-    # import resource
+    import time
+    import resource
 
-    # time_start = time.perf_counter()
+    time_start = time.perf_counter()
 
-    # ################################
-    # # actual code
-    # ################################
+    ################################
+    # actual code
+    ################################
     
-    # g = loader("../../data/Puck_190926_06_combined.csv")[1]
-    # cm, bc_met = filter_barcodes(g, bc_min={'counted_genes': 5, 
-    #                                         'variance': 0.01},
-    #                                 bc_max={'variance':4},
-    #                                 bc_top={'total_counts': 50})
-    # print(bc_met.head(10))
-    # print(f"Size of the matrix {cm.shape}")
-    # print()
+    g = loader("../../data/Puck_190926_06_combined.csv")[1]
+    cm, bc_met = filter_barcodes(g, bc_min={'counted_genes': 5, 
+                                            'variance': 0.01},
+                                    bc_max={'variance':4},
+                                    bc_top={'total_counts': 50})
+    print(bc_met.head(10))
+    print(f"Size of the matrix {cm.shape}")
+    print()
 
 
-    # ################################
-    # time_elapsed = (time.perf_counter() - time_start)
-    # memMb=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss/1024.0/1024.0
-    # print ("%5.1f secs %5.1f MByte" % (time_elapsed,memMb))
-    # print()
+    ################################
+    time_elapsed = (time.perf_counter() - time_start)
+    memMb=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss/1024.0/1024.0
+    print ("%5.1f secs %5.1f MByte" % (time_elapsed,memMb))
+    print()
     
     print("")
 
