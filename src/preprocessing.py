@@ -794,98 +794,61 @@ def spearman_corr(data: np.ndarray) -> np.ndarray:
 #  bag removal of correlated genes  #
 # --------------------------------- #
 
-def find_corr_cols(bool_corr_matrix: np.ndarray) -> dict:
-    """Transforms the boolean matrix of correlation (matrix of correlation 
-    evaluated for a certain treshold) into a dictionary, where the correlations
-    of columns are not repeated.
+def find_corr_cols(bool_corr_matrix: np.ndarray) -> list:
+    """Finds the correlated columns of a boolean correlation matrix.
 
     Args:
-        bool_corr_matrix (np.ndarray): boolean matrix of correlation where at
-            position (i,j) there is either a True or a False indicating if the
-            columns i and j are correlated or not, respectively.
+        bool_corr_matrix (np.ndarray): boolean correlation matrix where at
+            position (i,j) there is a True or a False, indicating that for some
+            threshold the columns i and j are correlated or not, respectively.
 
     Returns:
-        corr_centers (dict[int] -> set[int]): dictionary where the keys are the
-            indexes of the columns and the values of the dictionary are the 
-            indexes of the columns that correlate with the column of the key. 
+        corr_centers (list[tuples]): pairs of correlated columns.
     
     Ensures:
-        corr_centers: let i and j be the indexes of the column i and j, 
-            respectively, and i < j. If i and j are correlated, j will appear
-            in the dictionary as a value associated with the i key, but the 
-            reverse will not happen: i will not be a value in the dictionary 
-            associated with the j key. 
+        corr_centers: the pairs of correlated columns are sorted on the first
+            column and then on the second.
     """
 
     side = bool_corr_matrix.shape[0]
-    corr_centers = {}
+    corr_centers = []
 
     for row in np.arange(side-1):
         for col in np.arange(row+1, side):
             if bool_corr_matrix[row][col]:
-                if row in corr_centers:
-                    corr_centers[row].add(col)
-                else:
-                    corr_centers[row] = {col}
+                corr_centers.append((row, col))
     
     return corr_centers
 
 
-def filling_bag(corr_centers: dict, bags: list, passed_centers: set, index: int, 
-                queue: deque):
-    """Finds all the columns that should be in a certain bag and adds them 
-    inplace.
+def getting_bags(corr_centers: list) -> list:
+    """Groups the correlated columns on bags, based on whether there is a direct
+    or indirect correlation. Example: A and B are correlated; B and C are 
+    correlated; A and C are not correlated; A, B, C are all put into the same 
+    bag even though A and C are not correlated because there is a thread or 
+    correlation network that joins those two.
 
     Args:
-        corr_centers (dict): dictionary with the columns that are correlated.
-        bags (list): list of bags.
-        passed_centers (set): columns whose correlations have already been 
-            considered.
-        index (int): index of the current bag.
-        queue (deque): columns whose correlations are still to be evaluated.
-    """
-        
-    while len(queue) > 0:
-        curr = queue.popleft()
-        
-        if curr in passed_centers:
-            continue
-        passed_centers.add(curr)
-
-        bags[index] |= corr_centers[curr]
-        queue.extend(corr_centers[curr])
-
-
-def getting_bags(corr_centers: dict) -> list:
-    """Converts the dictionary of correlations into a list of 'bags' where each
-    bag corresponds to a collection of the columns that are connected either 
-    directly because they correlate to each other or because some columns that
-    they are correlated with are correlated themselves.
-
-    Args:
-        corr_centers (dict): dictionary of correlations.
+        corr_centers (list[tuples]): pairs of correlated columns.
 
     Returns:
-        bags (list[set]): sets of columns that are correlated either directly or
-            indirectly.
+        bags (list[set]): bags of directly or indirectly correlated columns.
     """
 
     bags = []
-    passed_centers = set()
     index = 0
-
-    for center in corr_centers:
-        if center in passed_centers:
-            continue
+    for x, y in corr_centers:
+        if x in bags[index]:
+            bags[index].add(y)
         
-        passed_centers.add(center)
-        bags.append(corr_centers[center])
-        bags[index].add(center)
+        elif y in bags[index]:
+            bags[index].add(x)
         
-        queue = deque(corr_centers[center])
-        filling_bag(corr_centers, bags, passed_centers, index, queue)
+        else:
+            if len(bags) != 0:
+                index += 1
+            bags.append(set((x,y)))
 
-        index += 1
     return bags
 
 

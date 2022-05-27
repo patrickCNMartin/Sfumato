@@ -17,52 +17,75 @@ class TestCorrelatedRemoval(unittest.TestCase):
 
     def test_find_corr_cols_NO_CORR(self):
         corr_matrix = np.zeros((6,6)) == 1
-        self.assertEqual(find_corr_cols(corr_matrix), {})
+        solution = []
+        self.assertEqual(find_corr_cols(corr_matrix), solution)
 
 
     def test_find_corr_cols_1_CORR(self):
         corr_matrix = np.ones((2,2)) == 1
-        self.assertEqual(find_corr_cols(corr_matrix), {0: {1}})
+        solution = [(0,1)]
+        self.assertEqual(find_corr_cols(corr_matrix), solution)
 
 
     def test_find_corr_cols_1_MULT_CORR(self):
-        corr_matrix = np.array([[1,1,1], [1,1,0], [1,0,1]]) == 1
-        self.assertEqual(find_corr_cols(corr_matrix), {0: {1,2}})
+        corr_matrix = np.array([[1,1,1], 
+                                [1,1,0], 
+                                [1,0,1]])
+        corr_matrix = corr_matrix == 1
+        solution = [(0,1), (0,2)]
+        self.assertEqual(find_corr_cols(corr_matrix), solution)
 
 
     def test_find_corr_cols_1_1_CORR(self):
-        corr_matrix = np.array([[1,1,0], [1,1,1], [0,1,1]]) == 1
-        self.assertEqual(find_corr_cols(corr_matrix), {0: {1}, 1: {2}})
+        corr_matrix = np.array([[1,1,0], 
+                                [1,1,1], 
+                                [0,1,1]]) 
+        corr_matrix = corr_matrix == 1
+        solution = [(0,1), (1,2)]
+        self.assertEqual(find_corr_cols(corr_matrix), solution)
 
 
     def test_find_corr_cols_1_NEST_CORR(self):
         corr_matrix = np.ones((3,3)) == 1
-        self.assertEqual(find_corr_cols(corr_matrix), {0: {1,2}, 1: {2}})
+        solution = [(0,1), (0,2), (1,2)]
+        self.assertEqual(find_corr_cols(corr_matrix), solution)
 
 
     def test_find_corr_cols_1_NEST_EMPTY_CORR(self):
-        corr_matrix = np.array([[1,1,1,0], [1,1,1,0], [1,1,1,0], [0,0,0,1]])
+        corr_matrix = np.array([[1,1,1,0], 
+                                [1,1,1,0], 
+                                [1,1,1,0], 
+                                [0,0,0,1]])
         corr_matrix = corr_matrix == 1
-        self.assertEqual(find_corr_cols(corr_matrix), {0: {1,2}, 1: {2}})
+        solution = [(0,1), (0,2), (1,2)]
+        self.assertEqual(find_corr_cols(corr_matrix), solution)
 
 
     def test_find_corr_cols_1_NEST_SINGLE_CORR(self):
-        corr_matrix = np.array([[1,1,1,0], [1,1,1,1], [1,1,1,0], [0,1,0,1]])
+        corr_matrix = np.array([[1,1,1,0], 
+                                [1,1,1,1], 
+                                [1,1,1,0], 
+                                [0,1,0,1]])
         corr_matrix = corr_matrix == 1
-        self.assertEqual(find_corr_cols(corr_matrix), {0: {1,2}, 1: {2,3}})
+        solution = [(0,1), (0,2), (1,2), (1,3)]
+        self.assertEqual(find_corr_cols(corr_matrix), solution)
 
 
     def test_find_corr_cols_1_NEST_FULL_CORR(self):
         corr_matrix = np.ones((4,4)) == 1
-        self.assertEqual(find_corr_cols(corr_matrix), {0: {1,2,3}, 1: {2,3}, 
-                                                        2: {3}})
+        solution = [(0,1), (0,2), (0,3), (1,2), (1,3), (2,3)]
+        self.assertEqual(find_corr_cols(corr_matrix), solution)
 
 
     def test_find_corr_cols_2_SINGLE_CORR(self):
-        corr_matrix = np.array([[1,1,0,0,0], [1,1,0,0,0], [0,0,1,0,0],
-                                [0,0,0,1,1], [0,0,0,1,1]])
+        corr_matrix = np.array([[1,1,0,0,0], 
+                                [1,1,0,0,0], 
+                                [0,0,1,0,0],
+                                [0,0,0,1,1], 
+                                [0,0,0,1,1]])
         bool_corr_matrix = corr_matrix == 1
-        self.assertEqual(find_corr_cols(bool_corr_matrix), {0: {1}, 3: {4}})
+        solution = [(0,1), (3,4)]
+        self.assertEqual(find_corr_cols(bool_corr_matrix), solution)
 
 
 
