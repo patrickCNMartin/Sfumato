@@ -235,31 +235,34 @@ class TestCorrelatedRemoval(unittest.TestCase):
 ###############################################################################
 
 if __name__ == '__main__':
-    # import time
-    # import resource
+    import time
+    import resource
 
-    # time_start = time.perf_counter()
+    time_start = time.perf_counter()
 
-    # ################################
-    # # actual code
-    # ################################
+    ################################
+    # actual code
+    ################################
     
-    # g = loader("../../data/Puck_190926_06_combined.csv")[1]
-    # cm, bc_met = filter_barcodes(g, bc_min={'counted_genes': 5, 
-    #                                         'variance': 0.01},
-    #                                 bc_max={'variance':4},
-    #                                 bc_top={'total_counts': 50})
-    # print(bc_met.head(10))
-    # print(f"Size of the matrix {cm.shape}")
-    # print()
+    filename = "../../data/Puck_190926_06_combined.csv"
+
+    cm, bc_met, gene_met = load_and_preprocess(filename, 
+                                bc_min={'counted_genes': 10, 'variance': 0.001},
+                                gene_top={'variance': 10})
+    print(f"Size of the matrix {cm.shape}")
+    print()
+    print(bc_met.head(6))
+    print()
+    print(gene_met.head(6))
+    print()
 
 
-    # ################################
-    # time_elapsed = (time.perf_counter() - time_start)
-    # memMb=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss/1024.0/1024.0
-    # print ("%5.1f secs %5.1f MByte" % (time_elapsed,memMb))
-    # print()
+    ################################
+    time_elapsed = (time.perf_counter() - time_start)
+    memMb=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss/1024.0/1024.0
+    print ("%5.1f secs %5.1f MByte" % (time_elapsed,memMb))
+    print()
     
     print("")
 
-    unittest.main()
+    # unittest.main()

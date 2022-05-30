@@ -11,6 +11,7 @@ from sklearn import preprocessing
 from functools import reduce, partial
 from collections import deque
 from scipy.stats import spearmanr
+from sklearn.decomposition import PCA
 
 
 ###############################################################################
@@ -951,11 +952,16 @@ def select_with_corr(cm: np.ndarray, gene_met: pd.DataFrame, corr_method: str,
     Args:
         cm (np.ndarray): count matrix (barcodes x genes).
         gene_met (pd.DataFrame): gene metrics.
-        corr_method (str): method to calculate the correlations of the genes.
-        threshold (float): value above which genes are to be considered 
-            correlated.
+        corr_method (str): method to calculate the correlations of the genes. 
+            Options: pearson - calculates the Pearson correlation coefficient;
+            spearman - calculates Spearman's rank coefficient.
+        threshold (float): difference from the maximum correlation coefficient
+            that genes need to have before being considered correlated.
         keep_method (str): method that will decide how correlated genes should
-            be eliminated.
+            be eliminated. Options: bag - picks one column at random from each 
+            subgraph of correlated genes to keep and eliminates the rest; 
+            apx_vc - finds the best genes that comprise all of the correlation 
+            with a 2 approximation on the best solution.
 
     Returns:
         cm (np.ndarray): count matrix without redundant genes.
@@ -983,17 +989,7 @@ def select_with_corr(cm: np.ndarray, gene_met: pd.DataFrame, corr_method: str,
 
 # ---------------------------- #
 #     coordinate scalling      #
-# ---------------------------- #
-
-def min_max_scaling(column: pd.Series):
-    """Performs min-max scaling inplace on a column of a dataframe.
-
-    Args:
-        column (pd.Series): column of a dataframe to be scaled.
-    """
-
-    preprocessing.minmax_scale(column, copy=False)
-
+# ---------------------------- # 
 
 def scale_coord(barcode_metrics: pd.DataFrame):
     """Performs min-max scaling inplace to the x coordinates and y coordinates
@@ -1004,8 +1000,8 @@ def scale_coord(barcode_metrics: pd.DataFrame):
             barcode.
     """
 
-    barcode_metrics.x_coor = min_max_scaling(barcode_metrics.x_coor)
-    barcode_metrics.y_coor = min_max_scaling(barcode_metrics.y_coor)
+    preprocessing.minmax_scale(barcode_metrics.x_coor, copy=False)
+    preprocessing.minmax_scale(barcode_metrics.y_coor, copy=False)
 
 
 # ---------------------------- #
@@ -1056,6 +1052,7 @@ def power_transform(data: np.ndarray, method: str):
                             '{\'yeo-johnson\', \'box-cox\'}')
     
     transformer = preprocessing.PowerTransformer(method=method, copy=False)
+    data = data + 1e-5
     transformer.fit(data)
     transformer.transform(data)
 
@@ -1099,3 +1096,111 @@ def transform_data(data: np.ndarray, transformation: str) -> np.ndarray:
 
 ###############################################################################
 # embedded methods
+
+def pca(data: np.ndarray, 
+        components: int or float or 'mle'=30) -> np.ndarray:
+    """Performs dimensionality reduction using PCA. Wrapper method for 
+    scikit-learn PCA class.
+
+    Args:
+        data (np.ndarray): data to be reduced.
+        components (int or float or str, optional): number of principal 
+            components to use or number of components which explain a higher 
+            percentage of the variance than the one given to use or calculate on
+            its own the number of principal components. Defaults to 30.
+
+    Returns:
+        np.ndarray: reduced data.
+    """
+
+    pca = PCA(components)
+    return pca.fit_transform(data)
+
+
+###############################################################################
+# join everything
+
+def load_and_preprocess(filename: str, delimiter=',', skip_fst_col: bool=True,
+                        bc_min: dict={}, bc_max: dict={}, bc_top: dict={}, 
+                        bc_bottom: dict={}, gene_min: dict={}, 
+                        gene_max: dict={}, gene_bottom: dict={}, 
+                        gene_top: dict={}, corr_method: str='spearman',
+                        threshold: float=0.05, keep_method: str='apx_vc',
+                        transformation: str='box-cox',
+                        components: int or float or 'mle'=30):
+    """Loads and preprocesses the data based on the given inputs.
+
+    Args:
+        filename (str): name and path of the file.
+        delimiter (str, optional): field/. Defaults to ",".
+        skip_fst_col (bool, optional): _description_. Defaults to True.
+        bc_min (dict, optional):  metrics (key) for which a minimum value 
+            (value) is required for each barcode to be included in the 
+            downstream analysis.
+        bc_max (dict, optional): metrics (key) for which a maximum value (value)
+            is required for each barcode to be included in the downstream 
+            analysis. Defaults to {}.
+        bc_top (dict, optional): percentage of barcodes with the highest value 
+            of each metric that are to be used in the downstream analysis.
+            Defaults to {}.
+        bc_bottom (dict, optional): percentage of barcodes with the lowest value
+            of each metric that are to be used in the downstream analysis.
+            Defaults to {}.
+        gene_min (dict, optional): metrics (key) for which a minimum value 
+            (value) is required for a gene to be included in the downstream 
+            analysis. Defaults to {}.
+        gene_max (dict, optional): metrics (key) for which a maximum value 
+            (value) is required for a gene to be included in the downstream 
+            analysis. Defaults to {}.
+        gene_top (dict, optional): percentage of genes with the highest value 
+            of each metric that are to be used in the downstream analysis.
+            Defaults to {}.
+        gene_bottom (dict, optional): percentage of genes with the lowest value
+            of each metric that are to be used in the downstream analysis.
+            Defaults to {}.
+        corr_method (str): method to calculate the correlations of the genes. 
+            Options: pearson - calculates the Pearson correlation coefficient;
+            spearman - calculates Spearman's rank coefficient. Defaults to 
+            'spearman'.
+        threshold (float): difference from the maximum correlation coefficient
+            that genes need to have before being considered correlated. Defaults
+            to 0.05.
+        keep_method (str): method that will decide how correlated genes should
+            be eliminated. Options: bag - picks one column at random from each 
+            subgraph of correlated genes to keep and eliminates the rest; 
+            apx_vc - finds the best genes that comprise all of the correlation 
+            with a 2 approximation on the best solution. Defaults to 'apx_vc'.
+        transformation (str, optional): scaling method or transfomation method 
+            to be applied. Options: robust - performs a robust scaling based on 
+            the median and interquartile region;  standard - performs 
+            standardization of the data (mean = 0, variance = 1); yeo-johnson -
+            performs yeo-johnson transformation; box-cox - performs box-cox 
+            transformation; log - performs the logaritmization of the data with 
+            the natural logarithm; log10 - performs the logaritmization of the
+            data with base 10. Defaults to 'box-cox'.
+        components (intorfloator&#39;mle, optional): number of principal 
+            components to use or number of components which explain a higher 
+            percentage of the variance than the one given to use or calculate on
+            its own the number of principal components. Defaults to 30.
+
+    Returns:
+        cm (np.ndarray): filtered, transformed and reduced count matrix of 
+            barcodes x genes.
+        bc_met (pd.DataFrame): barcode metrics and coordinates.
+        gene_met (pd.DataFrame): gene metrics.
+    """
+    
+    gene_names, bc_gen = loader(filename, delimiter, skip_fst_col)
+    
+    cm, bc_met = filter_barcodes(bc_gen, bc_min, bc_max, bc_top, bc_bottom)
+    cm, gene_met = filter_genes(gene_names, cm, gene_min, gene_max, gene_bottom,
+                                gene_top)
+    
+    cm, gene_met = select_with_corr(cm, gene_met, corr_method, threshold, 
+                                    keep_method)
+
+    scale_coord(bc_met)
+    cm = transform_data(cm, transformation)
+    cm = pca(cm, components)
+
+    return cm, bc_met, gene_met
