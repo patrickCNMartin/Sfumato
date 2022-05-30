@@ -794,33 +794,6 @@ def spearman_corr(data: np.ndarray) -> np.ndarray:
 #  bag removal of correlated genes  #
 # --------------------------------- #
 
-def find_corr_cols(bool_corr_matrix: np.ndarray) -> list:
-    """Finds the correlated columns of a boolean correlation matrix.
-
-    Args:
-        bool_corr_matrix (np.ndarray): boolean correlation matrix where at
-            position (i,j) there is a True or a False, indicating that for some
-            threshold the columns i and j are correlated or not, respectively.
-
-    Returns:
-        corr_centers (list[tuples]): pairs of correlated columns.
-    
-    Ensures:
-        corr_centers: the pairs of correlated columns are sorted on the first
-            column and then on the second.
-    """
-
-    side = bool_corr_matrix.shape[0]
-    corr_centers = []
-
-    for row in np.arange(side-1):
-        for col in np.arange(row+1, side):
-            if bool_corr_matrix[row][col]:
-                corr_centers.append((row, col))
-    
-    return corr_centers
-
-
 def getting_bags(corr_centers: list) -> list:
     """Groups the correlated columns on bags, based on whether there is a direct
     or indirect correlation. Example: A and B are correlated; B and C are 
@@ -871,7 +844,7 @@ def removing_cols_from_bags(bags: list) -> set:
     return cols_2_rm
 
 
-def bag_approach(bool_corr_matrix: np.ndarray) -> list:
+def bag_approach(edges: list) -> list:
     """Takes a bag approach to the removal of correlated/redundant genes. It 
     makes the assumption that if A and B are correlated, B and C are correlated,
     but A and C are not correlated, then the samples of A and B are not 
@@ -879,24 +852,96 @@ def bag_approach(bool_corr_matrix: np.ndarray) -> list:
     will be treated as if they were all correlated amongst each other.
 
     Args:
-        bool_corr_matrix (np.ndarray): boolean matrix of correlation where at
-            position (i,j) there is either a True or a False indicating if the
-            columns i and j are correlated or not, respectively.
+        edges (list): pairs of the indexes of columns that are correlated.
 
     Returns:
-        list: indexes of the genes/columns that are to be kept (should not be
-            removed).
+        list: indexes of the columns that are to be removed.
     """
-    corr_centers = find_corr_cols(bool_corr_matrix)
-    bags = getting_bags(corr_centers)
-    cols_2_rm = removing_cols_from_bags(bags)
-    return [i for i in np.arange(bool_corr_matrix.shape[0]) 
-                if i not in cols_2_rm]
+    
+    bags = getting_bags(edges)
+    return removing_cols_from_bags(bags)
+
+
+# ------------------------------------------------- #
+#  approx vertex cover removal of correlated genes  #
+# ------------------------------------------------- #
+
+def apx_vertex_cover(edges: list) -> set:
+    """Chooses the genes to remove in a more conservative manner.
+
+    Args:
+        edges (list): pairs of the indexes of columns that are correlated.
+
+    Returns:
+        set: indexes of the columns that are to be removed.
+    """
+
+    vert_2_rm = set()
+    covered_vert = set()
+
+    for vert1, vert2 in edges:
+        vert_2_rm.add(vert1)
+        vert_2_rm.add(vert2)
+
+        if vert1 not in covered_vert and vert2 not in covered_vert:
+            covered_vert.add(vert1)
+            covered_vert.add(vert2)
+    
+    return vert_2_rm - covered_vert
 
 
 # ------------------------------- #
 #  removal of correlated genes    #
 # ------------------------------- #
+
+def find_corr_cols(bool_corr_matrix: np.ndarray) -> list:
+    """Finds the correlated columns of a boolean correlation matrix.
+
+    Args:
+        bool_corr_matrix (np.ndarray): boolean correlation matrix where at
+            position (i,j) there is a True or a False, indicating that for some
+            threshold the columns i and j are correlated or not, respectively.
+
+    Returns:
+        edges (list[tuples]): pairs of the indexes of the correlated columns.
+    
+    Ensures:
+        edges: the pairs of correlated columns are sorted on the first column 
+            and then on the second.
+    """
+
+    side = bool_corr_matrix.shape[0]
+    edges = []
+
+    for row in np.arange(side-1):
+        for col in np.arange(row+1, side):
+            if bool_corr_matrix[row][col]:
+                edges.append((row, col))
+    
+    return edges
+
+
+def keep_genes(bool_corr_matrix: np.ndarray, approach: callable) -> list:
+    """Chooses the genes to keep. The genes that are not returned correspond to
+    genes deemed redundant.
+
+    Args:
+        bool_corr_matrix (np.ndarray): bool_corr_matrix (np.ndarray): boolean 
+            correlation matrix where at position (i,j) there is a True or a 
+            False, indicating that for some threshold the columns i and j are 
+            correlated or not, respectively.
+        approach (callable): function responsible for determining the genes that
+            are to be removed.
+
+    Returns:
+        list: indexes of the columns to keep
+    """
+
+    corr_centers = find_corr_cols(bool_corr_matrix)
+    cols_2_rm = approach(corr_centers)
+    return [i for i in np.arange(bool_corr_matrix.shape[0]) 
+                if i not in cols_2_rm]
+
 
 def select_with_corr(cm: np.ndarray, gene_met: pd.DataFrame, corr_method: str, 
                         threshold: float, keep_method: str) -> tuple:
@@ -920,11 +965,11 @@ def select_with_corr(cm: np.ndarray, gene_met: pd.DataFrame, corr_method: str,
     avail_corr_methods = {'pearson': pearson_corr, 'spearman': spearman_corr}
     is_chosen_available(avail_corr_methods, corr_method, False)
 
-    avail_keep_methods = {'bag': bag_approach}
+    avail_keep_methods = {'bag': bag_approach, 'apx_vc': apx_vertex_cover}
     is_chosen_available(avail_keep_methods, keep_method, False)
     
     corr_matrix = avail_corr_methods[corr_method](cm) >= (1 - threshold)
-    genes_2_keep = avail_keep_methods[keep_method](corr_matrix)
+    genes_2_keep = keep_genes(corr_matrix, avail_keep_methods[keep_method])
 
     gene_met = gene_met.iloc[genes_2_keep]
     gene_met.reset_index(inplace=True)
